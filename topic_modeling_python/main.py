@@ -8,10 +8,14 @@
 import os
 import sys
 import re
+import json
 import warnings
 import traceback
 from pathlib import Path
 from datetime import datetime
+
+from dotenv import load_dotenv
+load_dotenv()  # .env 파일에서 환경변수 로드
 
 warnings.filterwarnings("ignore")
 
@@ -504,6 +508,135 @@ def print_topic_summary(topic_model, topic_info):
 
 
 # ─────────────────────────────────────────────
+# 8. Claude API — CBIM 9요소 자동 매핑
+# ─────────────────────────────────────────────
+
+# CBIM(Consumer Brand Insight Map) 9요소 정의
+CBIM_ELEMENTS = [
+    "브랜드 인지",       # 소비자가 브랜드를 알고 있는 정도
+    "브랜드 이미지",     # 브랜드에 대한 전반적 인상/연상
+    "브랜드 경험",       # 제품·서비스 사용 경험
+    "브랜드 충성도",     # 반복 구매·재이용 의도
+    "기능적 가치",       # 제품 성능·품질·가격 편익
+    "감성적 가치",       # 사용 시 느끼는 감정·감성 편익
+    "사회적 가치",       # 사회적 지위·소속감 편익
+    "소비자 행동",       # 구매 의도·구전·불만 행동 등
+    "시장 트렌드",       # 산업·시장 흐름·경쟁 동향
+]
+
+OUT_CBIM = OUTPUT_DIR / "topics_cbim_mapping.csv"
+
+
+def map_topics_to_cbim(topic_model, topic_info) -> None:
+    """
+    Claude API를 사용해 각 토픽의 상위 키워드를 CBIM 9요소 중 하나에 자동 매핑하고
+    output/topics_cbim_mapping.csv 로 저장한다.
+    """
+    import anthropic
+    import pandas as pd
+
+    log("=" * 55)
+    log("STEP 7: Claude API — CBIM 9요소 자동 매핑")
+    log("=" * 55)
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        log("ANTHROPIC_API_KEY 환경변수 없음 — CBIM 매핑 건너뜀", "WARN")
+        return
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    # 유효 토픽 목록 수집
+    valid_topics = topic_info[topic_info["Topic"] != -1].copy()
+    if valid_topics.empty:
+        log("유효 토픽 없음 — CBIM 매핑 건너뜀", "WARN")
+        return
+
+    # 토픽별 키워드 딕셔너리 구성
+    topic_kw_map: dict[int, list[str]] = {}
+    for _, row in valid_topics.iterrows():
+        tid = int(row["Topic"])
+        words = topic_model.get_topic(tid)
+        if words:
+            topic_kw_map[tid] = [w for w, _ in words[:10]]
+
+    if not topic_kw_map:
+        log("키워드 추출 실패 — CBIM 매핑 건너뜀", "WARN")
+        return
+
+    # Claude에 넘길 프롬프트 구성
+    topics_text = "\n".join(
+        f"- 토픽 T{tid}: {', '.join(kws)}"
+        for tid, kws in topic_kw_map.items()
+    )
+    cbim_list = "\n".join(f"{i+1}. {elem}" for i, elem in enumerate(CBIM_ELEMENTS))
+
+    prompt = f"""당신은 소비자 브랜드 인사이트 분석 전문가입니다.
+아래 뉴스 토픽 키워드 목록을 보고, 각 토픽을 CBIM(Consumer Brand Insight Map) 9요소 중 가장 적합한 하나에 매핑해 주세요.
+
+[CBIM 9요소]
+{cbim_list}
+
+[토픽 키워드 목록]
+{topics_text}
+
+[출력 규칙]
+- 반드시 아래 형식의 JSON 배열만 출력하세요. 설명 없이 JSON만.
+- 각 항목: {{"topic_id": 숫자, "cbim_element": "요소명", "reason": "한 문장 근거"}}
+- cbim_element 값은 위 9요소 이름과 정확히 일치해야 합니다.
+
+JSON:"""
+
+    log(f"Claude API 호출 중... (토픽 {len(topic_kw_map)}개)")
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        log("Claude API 응답 수신 완료")
+    except Exception as e:
+        log(f"Claude API 호출 실패: {e}", "ERROR")
+        return
+
+    # JSON 파싱
+    try:
+        # 응답에 코드블록이 있으면 제거
+        raw_clean = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
+        mappings = json.loads(raw_clean)
+    except json.JSONDecodeError as e:
+        log(f"Claude 응답 JSON 파싱 실패: {e}", "ERROR")
+        log(f"원본 응답:\n{raw}", "ERROR")
+        return
+
+    # 결과 DataFrame 생성
+    rows = []
+    for item in mappings:
+        tid = item.get("topic_id")
+        cbim_elem = item.get("cbim_element", "")
+        reason = item.get("reason", "")
+        kws = topic_kw_map.get(int(tid), []) if tid is not None else []
+        rows.append({
+            "topic_id": tid,
+            "top_keywords": ", ".join(kws),
+            "cbim_element": cbim_elem,
+            "reason": reason,
+        })
+
+    df_cbim = pd.DataFrame(rows)
+    df_cbim.to_csv(OUT_CBIM, index=False, encoding="utf-8-sig")
+    log(f"CBIM 매핑 결과 저장: {OUT_CBIM} ({len(df_cbim)}개 토픽)")
+
+    # 콘솔 요약 출력
+    log("─" * 55)
+    log("CBIM 매핑 결과 요약")
+    log("─" * 55)
+    for _, row in df_cbim.iterrows():
+        log(f"  T{row['topic_id']:03d} → [{row['cbim_element']}] | {row['reason']}")
+
+
+# ─────────────────────────────────────────────
 # 메인 실행
 # ─────────────────────────────────────────────
 def main():
@@ -538,6 +671,9 @@ def main():
 
         # 7. 토픽 요약 출력
         print_topic_summary(topic_model, topic_info)
+
+        # 8. Claude API CBIM 9요소 자동 매핑
+        map_topics_to_cbim(topic_model, topic_info)
 
         # 완료
         elapsed = (datetime.now() - start).seconds
