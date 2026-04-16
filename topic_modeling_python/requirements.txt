@@ -9,3 +9,4 @@ umap-learn>=0.5.3
 hdbscan>=0.8.29
 python-dotenv>=1.0.0
 anthropic>=0.25.0
+gensim>=4.4.0
