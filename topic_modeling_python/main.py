@@ -271,13 +271,27 @@ def run_bertopic(df):
         embedding_model = SentenceTransformer(fallback_model)
         log("폴백 모델 로딩 완료")
 
-    # 임베딩 생성
-    log("문서 임베딩 생성 중... (시간 소요)")
-    embeddings = embedding_model.encode(
-        docs,
-        show_progress_bar=True,
-        batch_size=128,
-    )
+    # 임베딩 생성 (캐시 활용으로 재실행 시 시간 절약)
+    import numpy as np
+    EMBEDDING_CACHE = OUTPUT_DIR / "embeddings_cache.npy"
+    if EMBEDDING_CACHE.exists():
+        embeddings = np.load(str(EMBEDDING_CACHE))
+        log(f"임베딩 캐시 로드: {EMBEDDING_CACHE} shape={embeddings.shape}")
+        if embeddings.shape[0] != len(docs):
+            log("캐시 문서 수 불일치 - 재생성", "WARN")
+            embeddings = None
+    else:
+        embeddings = None
+
+    if embeddings is None:
+        log("문서 임베딩 생성 중... (시간 소요)")
+        embeddings = embedding_model.encode(
+            docs,
+            show_progress_bar=True,
+            batch_size=128,
+        )
+        np.save(str(EMBEDDING_CACHE), embeddings)
+        log(f"임베딩 캐시 저장: {EMBEDDING_CACHE}")
     log(f"임베딩 완료: shape={embeddings.shape}")
 
     # UMAP 차원 축소
@@ -290,18 +304,20 @@ def run_bertopic(df):
     )
 
     # HDBSCAN 클러스터링
+    # min_cluster_size=8: 더 세분화된 토픽 생성
     hdbscan_model = HDBSCAN(
-        min_cluster_size=30,
+        min_cluster_size=8,
         metric="euclidean",
         cluster_selection_method="eom",
         prediction_data=True,
     )
 
     # CountVectorizer (한국어 공백 기반 토크나이저)
+    # min_df=2: 소규모 클러스터에서 max_df < min_df 충돌 방지
     vectorizer = CountVectorizer(
         tokenizer=lambda x: x.split(),
         token_pattern=None,
-        min_df=5,
+        min_df=2,
         max_df=0.95,
     )
 
@@ -375,7 +391,7 @@ def save_articles(df):
 
 
 # ─────────────────────────────────────────────
-# 6. DTM (Dynamic Topic Modeling) — 월별 트렌드
+# 6. DTM (Dynamic Topic Modeling) - 월별 트렌드
 # ─────────────────────────────────────────────
 def run_dtm(df, topic_model):
     """월별 토픽 비중 변화를 계산하고 시각화한다."""
@@ -385,14 +401,14 @@ def run_dtm(df, topic_model):
     import seaborn as sns
 
     log("=" * 55)
-    log("STEP 5: DTM — 월별 토픽 트렌드")
+    log("STEP 5: DTM - 월별 토픽 트렌드")
     log("=" * 55)
 
     # ── 한글 폰트 설정 ──
     _set_korean_font(plt, fm)
 
     if "일자" not in df.columns:
-        log("'일자' 컬럼 없음 — DTM 건너뜀", "WARN")
+        log("'일자' 컬럼 없음 - DTM 건너뜀", "WARN")
         return
 
     # 일자 → 월 컬럼 생성 (YYYYMMDD → YYYY-MM)
@@ -406,7 +422,7 @@ def run_dtm(df, topic_model):
     df_valid = df[df["topic_id"] != -1].copy()
 
     if len(df_valid) == 0:
-        log("유효한 토픽 기사 없음 — DTM 건너뜀", "WARN")
+        log("유효한 토픽 기사 없음 - DTM 건너뜀", "WARN")
         return
 
     # 월별 × 토픽 기사 수 피벗
@@ -484,7 +500,7 @@ def _set_korean_font(plt, fm):
             plt.rcParams["axes.unicode_minus"] = False
             log(f"한글 폰트 설정: {font}")
             return
-    log("한글 폰트 미발견 — 기본 폰트 사용 (한글 깨질 수 있음)", "WARN")
+    log("한글 폰트 미발견 - 기본 폰트 사용 (한글 깨질 수 있음)", "WARN")
 
 
 # ─────────────────────────────────────────────
@@ -508,7 +524,7 @@ def print_topic_summary(topic_model, topic_info):
 
 
 # ─────────────────────────────────────────────
-# 8. Claude API — CBIM 9요소 자동 매핑
+# 8. Claude API - CBIM 9요소 자동 매핑
 # ─────────────────────────────────────────────
 
 # CBIM(Consumer Brand Insight Map) 9요소 정의
@@ -536,12 +552,12 @@ def map_topics_to_cbim(topic_model, topic_info) -> None:
     import pandas as pd
 
     log("=" * 55)
-    log("STEP 7: Claude API — CBIM 9요소 자동 매핑")
+    log("STEP 7: Claude API - CBIM 9요소 자동 매핑")
     log("=" * 55)
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        log("ANTHROPIC_API_KEY 환경변수 없음 — CBIM 매핑 건너뜀", "WARN")
+        log("ANTHROPIC_API_KEY 환경변수 없음 - CBIM 매핑 건너뜀", "WARN")
         return
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -549,7 +565,7 @@ def map_topics_to_cbim(topic_model, topic_info) -> None:
     # 유효 토픽 목록 수집
     valid_topics = topic_info[topic_info["Topic"] != -1].copy()
     if valid_topics.empty:
-        log("유효 토픽 없음 — CBIM 매핑 건너뜀", "WARN")
+        log("유효 토픽 없음 - CBIM 매핑 건너뜀", "WARN")
         return
 
     # 토픽별 키워드 딕셔너리 구성
@@ -561,24 +577,31 @@ def map_topics_to_cbim(topic_model, topic_info) -> None:
             topic_kw_map[tid] = [w for w, _ in words[:10]]
 
     if not topic_kw_map:
-        log("키워드 추출 실패 — CBIM 매핑 건너뜀", "WARN")
+        log("키워드 추출 실패 - CBIM 매핑 건너뜀", "WARN")
         return
 
-    # Claude에 넘길 프롬프트 구성
-    topics_text = "\n".join(
-        f"- 토픽 T{tid}: {', '.join(kws)}"
-        for tid, kws in topic_kw_map.items()
-    )
+    # CBIM 리스트 문자열 구성
     cbim_list = "\n".join(f"{i+1}. {elem}" for i, elem in enumerate(CBIM_ELEMENTS))
 
-    prompt = f"""당신은 소비자 브랜드 인사이트 분석 전문가입니다.
+    # 60개씩 배치로 나눠 Claude API 호출 (토큰 초과 방지)
+    BATCH_SIZE = 60
+    topic_ids = list(topic_kw_map.keys())
+    all_mappings = []
+
+    for batch_start in range(0, len(topic_ids), BATCH_SIZE):
+        batch_ids = topic_ids[batch_start:batch_start + BATCH_SIZE]
+        batch_text = "\n".join(
+            f"- 토픽 T{tid}: {', '.join(topic_kw_map[tid])}"
+            for tid in batch_ids
+        )
+        batch_prompt = f"""당신은 소비자 브랜드 인사이트 분석 전문가입니다.
 아래 뉴스 토픽 키워드 목록을 보고, 각 토픽을 CBIM(Consumer Brand Insight Map) 9요소 중 가장 적합한 하나에 매핑해 주세요.
 
 [CBIM 9요소]
 {cbim_list}
 
 [토픽 키워드 목록]
-{topics_text}
+{batch_text}
 
 [출력 규칙]
 - 반드시 아래 형식의 JSON 배열만 출력하세요. 설명 없이 JSON만.
@@ -587,28 +610,27 @@ def map_topics_to_cbim(topic_model, topic_info) -> None:
 
 JSON:"""
 
-    log(f"Claude API 호출 중... (토픽 {len(topic_kw_map)}개)")
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = message.content[0].text.strip()
-        log("Claude API 응답 수신 완료")
-    except Exception as e:
-        log(f"Claude API 호출 실패: {e}", "ERROR")
-        return
+        batch_num = batch_start // BATCH_SIZE + 1
+        total_batches = (len(topic_ids) + BATCH_SIZE - 1) // BATCH_SIZE
+        log(f"Claude API 호출 중... (배치 {batch_num}/{total_batches}, 토픽 {len(batch_ids)}개)")
+        try:
+            message = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=8192,
+                messages=[{"role": "user", "content": batch_prompt}],
+            )
+            raw = message.content[0].text.strip()
+            raw_clean = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
+            batch_mappings = json.loads(raw_clean)
+            all_mappings.extend(batch_mappings)
+            log(f"배치 {batch_num}/{total_batches} 완료 ({len(batch_mappings)}개 매핑)")
+        except json.JSONDecodeError as e:
+            log(f"배치 {batch_num} JSON 파싱 실패: {e}", "ERROR")
+        except Exception as e:
+            log(f"배치 {batch_num} API 호출 실패: {e}", "ERROR")
 
-    # JSON 파싱
-    try:
-        # 응답에 코드블록이 있으면 제거
-        raw_clean = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
-        mappings = json.loads(raw_clean)
-    except json.JSONDecodeError as e:
-        log(f"Claude 응답 JSON 파싱 실패: {e}", "ERROR")
-        log(f"원본 응답:\n{raw}", "ERROR")
-        return
+    mappings = all_mappings
+    log(f"Claude API 전체 응답 완료 (총 {len(mappings)}개 매핑)")
 
     # 결과 DataFrame 생성
     rows = []
