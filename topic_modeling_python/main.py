@@ -214,6 +214,16 @@ def preprocess(df):
 
     df = df.reset_index(drop=True)
 
+    # 섹터 키워드 필터링 (본문 또는 키워드 컬럼에 하나라도 포함된 기사만 유지)
+    SECTOR_KEYWORDS = ["섬유", "패션", "의류", "봉제"]
+    before_filter = len(df)
+    text_col = df["본문"].fillna("")
+    if "키워드" in df.columns:
+        text_col = text_col + " " + df["키워드"].fillna("")
+    mask = text_col.str.contains("|".join(SECTOR_KEYWORDS), na=False)
+    df = df[mask].copy().reset_index(drop=True)
+    log(f"섹터 키워드 필터링 ({', '.join(SECTOR_KEYWORDS)}): {before_filter:,} → {len(df):,}건 ({before_filter - len(df):,}건 제거)")
+
     # HTML 태그 제거
     log("HTML 태그 제거 중...")
     df["본문_정제"] = df["본문"].apply(clean_html)
