@@ -37,7 +37,7 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 DATA_FILE = BASE_DIR / "빅카인즈 NewsResult_20260115-20260415.csv"
-OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR = BASE_DIR / "output" / "output_v5"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 OUT_KEYWORDS = OUTPUT_DIR / "lda_topics_keywords.csv"

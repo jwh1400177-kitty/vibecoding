@@ -3,7 +3,36 @@
     "allow": [
       "Bash(git --version)",
       "Bash(git config:*)",
-      "Bash(gh --version)"
+      "Bash(gh --version)",
+      "WebFetch(domain:www.itnk.co.kr)",
+      "WebFetch(domain:www.apparelnews.co.kr)",
+      "WebFetch(domain:tnnews.co.kr)",
+      "WebFetch(domain:www.okfashion.co.kr)",
+      "WebFetch(domain:www.fi.co.kr)",
+      "WebFetch(domain:www.ktenews.co.kr)",
+      "WebFetch(domain:www.ktnews.com)",
+      "WebFetch(domain:www.kfashionnews.com)",
+      "WebFetch(domain:dito.fashion)",
+      "WebFetch(domain:www.texherald.co.kr)",
+      "WebFetch(domain:www.fashion-review.co.kr)",
+      "WebFetch(domain:fashionbiz.co.kr)",
+      "WebFetch(domain:www.fashiongio.com)",
+      "WebFetch(domain:www.fpost.co.kr)",
+      "WebFetch(domain:www.fashow.co.kr)",
+      "WebFetch(domain:www.peoplegate.co.kr)",
+      "WebFetch(domain:www.tinnews.co.kr)",
+      "Bash(curl -sk --max-time 10 \"http://www.okfashion.co.kr\")",
+      "Bash(curl -sk --max-time 10 \"http://www.ktenews.co.kr\")",
+      "Bash(curl -sk --max-time 10 \"http://www.texherald.co.kr\")",
+      "Bash(curl -sk --max-time 10 \"http://www.fashiongio.com\")",
+      "Bash(curl -sk --max-time 10 \"http://www.okfashion.co.kr/happynews_rss.php\")",
+      "Bash(curl -sk --max-time 10 \"http://www.ktenews.co.kr/rss/\")",
+      "Bash(curl -sk --max-time 10 \"http://www.texherald.co.kr/rss/\")",
+      "Bash(curl -sk --max-time 10 \"http://www.fashiongio.com/rss/\")",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(touch \"$f\")",
+      "Bash(done)"
     ]
   }
 }

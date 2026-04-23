@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(pip --version)",
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(where java:*)",
+      "Bash(java -XshowSettings:property -version)",
+      "Read(//c/Program Files/Java//**)",
+      "Read(//c/Program Files/Common Files/Oracle/Java//**)",
+      "Read(//c/Program Files/**)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-26\" python main.py)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-26\" python lda_main.py)"
+    ]
+  }
+}
